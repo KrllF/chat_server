@@ -23,10 +23,11 @@ const (
 
 type server struct {
 	desc.UnimplementedChatServerV1Server
+	pool *pgxpool.Pool
 }
 
 func (s *server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponce, error) {
-	createresp, err := res.CreateChat(ctx, req.GetUsernames())
+	createresp, err := res.CreateChat(ctx, s.pool, req.GetUsernames())
 	if err != nil {
 		return nil, errors.New("error in creating chat")
 	}
@@ -38,7 +39,7 @@ func (s *server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.
 }
 
 func (s *server) SendMessage(ctx context.Context, req *desc.SendRequest) (*emptypb.Empty, error) {
-	sendresp, err := res.SendMessage(ctx, req.GetFrom(), req.GetText())
+	sendresp, err := res.SendMessage(ctx, s.pool, req.GetFrom(), req.GetText())
 	if err != nil {
 		return nil, errors.New("error in send message")
 	}
@@ -46,23 +47,24 @@ func (s *server) SendMessage(ctx context.Context, req *desc.SendRequest) (*empty
 }
 
 func main() {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	s := grpc.NewServer()
-	reflection.Register(s)
-	desc.RegisterChatServerV1Server(s, &server{})
-
-	log.Printf("server listening at %v", lis.Addr())
 	ctx := context.Background()
 
 	pool, err := pgxpool.Connect(ctx, dbDSN)
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
-	res.DB = pool
 	defer pool.Close()
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer()
+	reflection.Register(s)
+	desc.RegisterChatServerV1Server(s, &server{pool: pool})
+
+	log.Printf("server listening at %v", lis.Addr())
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

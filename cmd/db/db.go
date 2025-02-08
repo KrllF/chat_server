@@ -13,9 +13,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-var DB *pgxpool.Pool
-
-func CreateChat(ctx context.Context, usernames []string) (*desc.CreateResponce, error) {
+func CreateChat(ctx context.Context, pool *pgxpool.Pool, usernames []string) (*desc.CreateResponce, error) {
 	memb := strings.Join(usernames, "&")
 	builderInsert := sq.Insert("chats").
 		PlaceholderFormat(sq.Dollar).
@@ -28,7 +26,7 @@ func CreateChat(ctx context.Context, usernames []string) (*desc.CreateResponce, 
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	var chatID int
-	err = DB.QueryRow(ctx, query, args...).Scan(&chatID)
+	err = pool.QueryRow(ctx, query, args...).Scan(&chatID)
 	if err != nil {
 		log.Printf("Failed to insert chat: query=%s, args=%v, error=%v", query, args, err)
 		return nil, fmt.Errorf("failed to insert chat: %w", err)
@@ -37,7 +35,7 @@ func CreateChat(ctx context.Context, usernames []string) (*desc.CreateResponce, 
 	return &desc.CreateResponce{Id: int64(chatID)}, nil
 }
 
-func SendMessage(ctx context.Context, from string, text string) (*emptypb.Empty, error) {
+func SendMessage(ctx context.Context, pool *pgxpool.Pool, from string, text string) (*emptypb.Empty, error) {
 	builderInsert := sq.Insert("messages").
 		PlaceholderFormat(sq.Dollar).
 		Columns("sender", "letter").
@@ -47,7 +45,7 @@ func SendMessage(ctx context.Context, from string, text string) (*emptypb.Empty,
 		log.Printf("failed to build query: %v", err)
 		return nil, err
 	}
-	res, err := DB.Exec(ctx, query, args...)
+	res, err := pool.Exec(ctx, query, args...)
 	if err != nil {
 		log.Printf("failed create message: %v", err)
 		return nil, err
